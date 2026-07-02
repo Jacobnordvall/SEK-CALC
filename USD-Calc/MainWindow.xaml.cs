@@ -199,7 +199,7 @@ namespace USD_Calc
         {
             try
             {
-                var uri = new Uri("https://example.com"); // placeholder link
+                var uri = new Uri("https://github.com/Jacobnordvall/SEK-CALC");
                 await Launcher.LaunchUriAsync(uri);
             }
             catch
