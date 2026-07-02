@@ -71,5 +71,13 @@
     <AssemblyTitle>SEK CALC</AssemblyTitle>
     <!-- AssemblyName must be a valid identifier (no spaces) -->
     <AssemblyName>SEK_Calc</AssemblyName>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>E5BB10192A298DEFC9ED9E75F0A80B6A20F001F2</PackageCertificateThumbprint>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+    <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+    <GenerateTestArtifacts>False</GenerateTestArtifacts>
+    <AppxBundle>Never</AppxBundle>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
   </PropertyGroup>
 </Project>
