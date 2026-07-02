@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "USD-Calc (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "USD-Calc (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
