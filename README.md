@@ -1,44 +1,39 @@
-# USD-Calc
+# SEK-CALC / USD-Calc
 
-A modern Windows application built for currency calculations. 
+Ett Windows-program för valutaomvandling.
 
-Because this is a debug build, the app package (`.msix`) is signed with a local self-signed development certificate. Windows will block the installation by default with error `0x800B0109`. Follow the instructions below to trust the certificate and install the app.
+Eftersom detta är ett debug-bygge är app-paketet (.msix) signerat med ett lokalt självsignerat utvecklarcertifikat. Windows blockerar installationen som standard med felkoden 0x800B0109. Följ instruktionerna nedan för att lita på certifikatet och installera appen automatiskt via PowerShell.
 
-## 🚀 Installation (Debug Build)
+## 🚀 Installation (Debug-bygge)
 
-To install the `.msix` package without third-party certificate authority validation, you need to import the embedded certificate into your machine's **Trusted People** store.
+Detta skript söker automatiskt upp MSIX-filen i din Downloads-mapp (inklusive undermappar som `USD-Calc_1.0.0.0_x64_Debug_Test`), extraherar utvecklarcertifikatet, sparar det till systemets betrodda lista och slutför installationen.
 
-### Automated Installation via PowerShell
+### Automatisk installation via PowerShell
 
-1. Open **PowerShell** or **Windows Terminal** as **Administrator** (Right-click Start ➔ Terminal (Admin)).
-2. Copy and run the following script block:
+1. Högerklicka på **Start-menyn** och välj **Terminal (Administratör)** eller **Windows PowerShell (Administratör)**.
+2. Kopiera och klistra in följande skriptblock i sin helhet och tryck på **Enter**:
 
 ```powershell
-# 1. Extract the self-signed certificate from the MSIX package
-cert = (Get-AuthenticodeSignature -FilePath "HOME\Downloads\USD-Calc_1.0.0.0_x64_Debug.msix").SignerCertificate
-
-# 2. Export the certificate to a temporary file
-Export-Certificate -Cert cert -FilePath "env:TEMP\usd-calc-dev.cer"
-
-# 3. Import the certificate into the Local Machine's Trusted People store
-Import-Certificate -CertStoreLocation Cert:\LocalMachine\TrustedPeople -FilePath "\$env:TEMP\usd-calc-dev.cer"
-
-# 4. Install the MSIX package
-Add-AppxPackage -Path "\$HOME\Downloads\USD-Calc_1.0.0.0_x64_Debug.msix"
-
-# 5. Clean up temporary certificate file
-Remove-Item "\$env:TEMP\usd-calc-dev.cer"
-```
-
-> 💡 **Note:** The script above assumes the `.msix` file is located in your **Downloads** folder (`$HOME\Downloads\`). If you moved the file, update the file paths on lines 2 and 11 before running.
-
-## 🛠️ Troubleshooting
-
-### Error: "Deployment failed with HRESULT: 0x800B0109"
-This means the certificate import step was skipped or failed. Ensure you ran the PowerShell window as an **Administrator**. Windows requires elevated privileges to modify the `LocalMachine` certificate store.
-
-### Developer Mode Requirement
-If the installation still fails after importing the certificate, you may need to enable Developer Mode on your machine:
-1. Open Windows **Settings** (`Win + I`).
-2. Navigate to **Privacy & security** ➔ **For developers**.
-3. Toggle **Developer Mode** to **On**.
+Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Recurse -Filter "USD-Calc*.msix" -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object {
+    Write-Host "Hittade installerare: $($_.FullName)" -ForegroundColor Green
+    
+    # Exportera certifikatet direkt från filen till en temporär fil
+    $cert = (Get-AuthenticodeSignature -FilePath $_.FullName).SignerCertificate
+    if ($null -ne $cert) {
+        $tempCert = Join-Path $env:TEMP "usddev.cer"
+        Export-Certificate -Cert $cert -FilePath $tempCert | Out-Null
+        
+        # Importera certifikatet till datorns betrodda personer
+        Import-Certificate -CertStoreLocation Cert:\LocalMachine\TrustedPeople -FilePath $tempCert | Out-Null
+        Write-Host "Certifikatet har lagts till i Betrodda personer." -ForegroundColor Green
+        
+        # Rensa temporär fil
+        Remove-Item $tempCert -ErrorAction SilentlyContinue
+    } else {
+        Write-Warning "Kunde inte hitta något giltigt certifikat i MSIX-paketet."
+    }
+    
+    # Installera själva MSIX-paketet
+    Add-AppxPackage -Path $_.FullName
+    Write-Host "Klart! Appen har installerats utan problem." -ForegroundColor Green
+}
