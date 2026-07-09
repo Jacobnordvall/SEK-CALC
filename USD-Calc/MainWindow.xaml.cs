@@ -32,15 +32,37 @@ namespace USD_Calc
     public sealed partial class MainWindow : Window
     {
         // remember last clipboard text we applied so we don't reapply the same value repeatedly
-        private string _lastClipboardTextApplied;
+        private string _lastClipboardTextApplied = string.Empty;
 
         public MainWindow()
         {
             InitializeComponent();
+            // One-time clear of saved settings to allow fresh testing.
+            try
+            {
+                var marker = Path.Combine(AppContext.BaseDirectory, "__settings_cleared_once");
+                if (!File.Exists(marker))
+                {
+                    try
+                    {
+                        var local = ApplicationData.Current.LocalSettings;
+                        local.Values.Clear();
+                    }
+                    catch { }
+                    try
+                    {
+                        var roaming = ApplicationData.Current.RoamingSettings;
+                        roaming.Values.Clear();
+                    }
+                    catch { }
+                    try { File.WriteAllText(marker, DateTime.UtcNow.ToString("o")); } catch { }
+                }
+            }
+            catch { }
             // Default input to 1 on start, then compute immediately
             try
             {
-                InputBox.Text = "1";
+                InputBox!.Text = "1";
                 ComputeAndShow();
             }
             catch
@@ -102,20 +124,21 @@ namespace USD_Calc
                     {
                         this.ExtendsContentIntoTitleBar = true;
                         // make DragArea the draggable title bar region (DragArea spans full width so edges remain draggable)
-                        this.SetTitleBar(DragArea);
+                        this.SetTitleBar(DragArea!);
                 // set native window icons so taskbar and titlebar previews use the custom icon
                 try
                 {
-                    SetWindowIconFromFile(Path.Combine(AppContext.BaseDirectory, "dollar-sign.ico"));
-                    // Restore always-on-top setting if present
+                SetWindowIconFromFile(Path.Combine(AppContext.BaseDirectory, "dollar-sign.ico"));
+                    // Restore settings hint (multiplier) so UI shows correct multiplier
                     try
                     {
-                        if (localSettings.Values.TryGetValue("AlwaysOnTop", out object aotObj) &&
-                            bool.TryParse(aotObj as string, out bool aot) && aot)
+                        if (localSettings.Values.TryGetValue("Multiplier", out object multObj))
                         {
-                            SetWindowTopmost(true);
-                            // ensure toggle reflects state if control is available
-                            try { AlwaysOnTopToggle.IsOn = true; } catch { }
+                            double m;
+                            if (double.TryParse(multObj.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out m))
+                            {
+                                HintText!.Text = $"Result is input × {m.ToString(CultureInfo.InvariantCulture).Replace('.', ',')}";
+                            }
                         }
                     }
                     catch { }
@@ -163,10 +186,51 @@ namespace USD_Calc
             if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out double value) ||
                 double.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out value))
             {
-                double result = value * 10.25;
+                // Read multiplier and rounding settings from LocalSettings (persisted)
+                double multiplier = 10.25;
+                int roundMode = 0; // 0 = normal, 1 = always round up
+                try
+                {
+                    var local = ApplicationData.Current.LocalSettings;
+                    if (local != null)
+                    {
+                        if (local.Values.TryGetValue("Multiplier", out object mobj))
+                        {
+                            if (double.TryParse(mobj?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out double mval))
+                                multiplier = mval;
+                        }
+
+                        if (local.Values.TryGetValue("RoundMode", out object robj))
+                        {
+                            try
+                            {
+                                roundMode = Convert.ToInt32(robj);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore settings read errors and use defaults
+                }
+
+                double rawResult = value * multiplier;
+                double result;
+                if (roundMode == 1)
+                {
+                    // Always round up to 2 decimal places
+                    result = Math.Ceiling(rawResult * 100.0) / 100.0;
+                }
+                else
+                {
+                    // Standard rounding to 2 decimals (banker's rounding)
+                    result = Math.Round(rawResult, 2, MidpointRounding.ToEven);
+                }
+
                 // Format without thousands separator and with comma as decimal separator (e.g. 59000,50)
                 var formatted = result.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace('.', ',');
-                ResultText.Text = formatted + " SEK";
+                ResultText!.Text = formatted + " SEK";
             }
             else
             {
@@ -176,7 +240,7 @@ namespace USD_Calc
 
         private void ResultText_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            var text = ResultText.Text ?? string.Empty;
+            var text = ResultText!.Text ?? string.Empty;
             // copy numeric part only
             var num = text.Replace("SEK", "").Trim();
             try
@@ -195,6 +259,34 @@ namespace USD_Calc
             }
         }
 
+        // Expand clickable area: treat pointer presses inside an expanded vertical area around the ResultText as taps.
+        private void ResultBorder_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (ResultBorder == null || ResultText == null)
+                return;
+
+            try
+            {
+                var pt = e.GetCurrentPoint(ResultBorder!).Position;
+                var transform = ResultText!.TransformToVisual(ResultBorder!);
+                var rect = transform.TransformBounds(new Windows.Foundation.Rect(0, 0, ResultText!.ActualWidth, ResultText!.ActualHeight));
+
+                double expand = rect.Height * 1.5;
+                var expanded = new Windows.Foundation.Rect(rect.X, rect.Y - expand, rect.Width, rect.Height + (expand * 2));
+
+                if (expanded.Contains(pt))
+                {
+                    // Treat as a tap
+                    ResultText_Tapped(ResultText, null);
+                    e.Handled = true;
+                }
+            }
+            catch
+            {
+                try { ResultText_Tapped(ResultText, null); } catch { }
+            }
+        }
+
         private async void OnNameTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             try
@@ -210,14 +302,7 @@ namespace USD_Calc
 
         private void OnAlwaysOnTopLabelTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            try
-            {
-                AlwaysOnTopToggle.IsOn = !AlwaysOnTopToggle.IsOn;
-            }
-            catch
-            {
-                // ignore
-            }
+            // No-op: always-on-top moved to settings window
         }
 
         private async Task ShowCopyConfirmationAsync()
@@ -229,7 +314,7 @@ namespace USD_Calc
                 {
                     try
                     {
-                        GlobalCopiedBorder.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        GlobalCopiedBorder!.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
                         GlobalCopiedBorder.Opacity = 1;
                     }
                     catch
@@ -244,7 +329,7 @@ namespace USD_Calc
                 {
                     try
                     {
-                        GlobalCopiedBorder.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                        GlobalCopiedBorder!.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
                         GlobalCopiedBorder.Opacity = 0;
                     }
                     catch
@@ -277,20 +362,36 @@ namespace USD_Calc
                 double labelFont = Math.Clamp(height * 0.05, 12, 18);
 
                 // Apply sizes on UI thread
-                _ = DispatcherQueue.TryEnqueue(() =>
-                {
-                    ResultText.FontSize = resultFont;
-                    InputBox.FontSize = inputFont;
-                    UsdLabel.FontSize = labelFont;
-                    // make hint and owner use the same label font so they scale identically
-                    HintText.FontSize = labelFont;
-                    try { OwnerText.FontSize = labelFont; } catch { }
-                    try { AlwaysOnTopToggle.FontSize = labelFont; } catch { }
+                    _ = DispatcherQueue.TryEnqueue(() =>
+                    {
+                        ResultText!.FontSize = resultFont;
+                        InputBox!.FontSize = inputFont;
+                        UsdLabel!.FontSize = labelFont;
+                        // make hint and owner use the same label font so they scale identically
+                        HintText!.FontSize = labelFont;
+                        if (OwnerText != null) OwnerText.FontSize = labelFont;
 
-                    // make input width scale with window
-                    double inputWidth = Math.Clamp(width * 0.4, 140, 700);
-                    InputBox.Width = inputWidth;
-                });
+                        // Scale settings panel controls so they match main UI scaling in small windows
+                        try
+                        {
+                            double controlFont = Math.Clamp(height * 0.045, 10, 16);
+                            var settingsMultiplier = this.Content as FrameworkElement != null ? (this.Content as FrameworkElement).FindName("SettingsMultiplierBox") as TextBox : null;
+                            var settingsRound = this.Content as FrameworkElement != null ? (this.Content as FrameworkElement).FindName("SettingsRoundUpCheck") as CheckBox : null;
+                            var settingsAlways = this.Content as FrameworkElement != null ? (this.Content as FrameworkElement).FindName("SettingsAlwaysOnTopCheck") as CheckBox : null;
+                            var settingsSave = this.Content as FrameworkElement != null ? (this.Content as FrameworkElement).FindName("SettingsSaveButton") as Button : null;
+                            var settingsClose = this.Content as FrameworkElement != null ? (this.Content as FrameworkElement).FindName("SettingsCloseButton") as Button : null;
+                            if (settingsMultiplier != null) settingsMultiplier.FontSize = controlFont;
+                            if (settingsRound != null) settingsRound.FontSize = controlFont;
+                            if (settingsAlways != null) settingsAlways.FontSize = controlFont;
+                            if (settingsSave != null) settingsSave.FontSize = controlFont;
+                            if (settingsClose != null) settingsClose.FontSize = controlFont;
+                        }
+                        catch { }
+
+                        // make input width scale with window
+                        double inputWidth = Math.Clamp(width * 0.4, 140, 700);
+                        InputBox!.Width = inputWidth;
+                    });
             }
             catch
             {
@@ -303,6 +404,78 @@ namespace USD_Calc
             var hwnd = WindowNative.GetWindowHandle(this);
             var id = Win32Interop.GetWindowIdFromWindow(hwnd);
             return AppWindow.GetFromWindowId(id);
+        }
+
+        private async void OnSettingsClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Toggle in-window settings panel visibility and pre-fill multiplier + rounding
+                var visible = SettingsPanel.Visibility == Microsoft.UI.Xaml.Visibility.Visible;
+                if (visible)
+                {
+                    SettingsPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                }
+                else
+                {
+                    try
+                    {
+                        var local = ApplicationData.Current.LocalSettings;
+                        if (local.Values.TryGetValue("Multiplier", out var cur))
+                            SettingsMultiplierBox!.Text = cur?.ToString() ?? "10.25";
+                        else
+                            SettingsMultiplierBox!.Text = "10.25";
+
+                        if (local.Values.TryGetValue("RoundMode", out var r))
+                            SettingsRoundUpCheck!.IsChecked = Convert.ToInt32(r) == 1;
+                        else
+                            SettingsRoundUpCheck!.IsChecked = true;
+
+                        if (local.Values.TryGetValue("AlwaysOnTop", out var t))
+                            SettingsAlwaysOnTopCheck!.IsChecked = Convert.ToBoolean(t);
+                        else
+                            SettingsAlwaysOnTopCheck!.IsChecked = false;
+                    }
+                    catch { }
+                    SettingsPanel!.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private void OnSettingsCloseClicked(object sender, RoutedEventArgs e)
+        {
+            SettingsPanel!.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        }
+
+        private void OnSettingsSaveClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var local = ApplicationData.Current.LocalSettings;
+                // Pre-fill multiplier if empty
+                if (string.IsNullOrWhiteSpace(SettingsMultiplierBox!.Text))
+                {
+                    if (local.Values.TryGetValue("Multiplier", out var cur))
+                        SettingsMultiplierBox.Text = cur?.ToString() ?? "10.25";
+                    else
+                        SettingsMultiplierBox.Text = "10.25";
+                }
+                else if (double.TryParse(SettingsMultiplierBox.Text.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var m))
+                {
+                    local.Values["Multiplier"] = m;
+                }
+
+                // RoundMode: 1 = always up, 0 = normal
+                local.Values["RoundMode"] = SettingsRoundUpCheck!.IsChecked == true ? 1 : 0;
+                local.Values["AlwaysOnTop"] = SettingsAlwaysOnTopCheck!.IsChecked == true;
+                try { WindowHelpers.SetWindowTopmost(SettingsAlwaysOnTopCheck!.IsChecked == true); } catch { }
+                SettingsPanel!.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            }
+            catch { }
         }
 
         // P/Invoke to set window icon
@@ -369,21 +542,7 @@ namespace USD_Calc
 
         private void OnAlwaysOnTopToggled(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                bool isOn = AlwaysOnTopToggle.IsOn;
-                SetWindowTopmost(isOn);
-                try
-                {
-                    var localSettings = ApplicationData.Current.LocalSettings;
-                    localSettings.Values["AlwaysOnTop"] = isOn.ToString();
-                }
-                catch { }
-            }
-            catch
-            {
-                // ignore
-            }
+            // moved to settings window
         }
 
         private void OnWindowActivated(object sender, WindowActivatedEventArgs e)
@@ -433,7 +592,7 @@ namespace USD_Calc
                         // Update input and compute
                         // Display using current culture's decimal separator
                         var display = normalized.Replace(".", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
-                        InputBox.Text = display;
+                        InputBox!.Text = display;
                         ComputeAndShow();
                         // remember what clipboard text we applied
                         _lastClipboardTextApplied = text;

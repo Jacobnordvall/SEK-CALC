@@ -13,7 +13,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.Resources>
         </Grid.Resources>
         <Grid.RowDefinitions>
@@ -39,6 +39,37 @@
             <!-- Global copy confirmation overlay removed from title; will be shown below the result -->
         </Grid>
 
+        <!-- Settings panel (in-window, hidden by default). Start at the same row as the main content so it doesn't overlap the title bar. -->
+        <Grid x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Grid.Row="1" Grid.RowSpan="2" Canvas.ZIndex="5">
+            <!-- Full-window overlay background dimmer -->
+            <Rectangle Fill="#80000000" Grid.ColumnSpan="2" />
+
+            <!-- Left docked settings column (flat, no outline) -->
+            <Grid Width="280" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Padding="12" HorizontalAlignment="Left">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="Settings" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+
+                    <TextBlock Text="Multiplier" Margin="0,6,0,4" />
+                    <TextBox x:Name="SettingsMultiplierBox" Width="160" HorizontalAlignment="Left" />
+
+                    <!-- Checkbox on the left for consistent layout -->
+                    <CheckBox x:Name="SettingsRoundUpCheck" Content="Always round up" IsChecked="True" Margin="0,6,0,0" />
+
+                    <CheckBox x:Name="SettingsAlwaysOnTopCheck" Content="Always on top" Margin="0,12,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,16,0,0" Spacing="8">
+                    <Button x:Name="SettingsSaveButton" Content="Save" Click="OnSettingsSaveClicked" />
+                    <Button x:Name="SettingsCloseButton" Content="Close" Click="OnSettingsCloseClicked" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+
         <!-- Always-on-top toggle removed from bottom-left; placed next to hint/owner text below -->
 
         <Grid Grid.Row="1" Margin="12" HorizontalAlignment="Center">
@@ -55,7 +86,7 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <Border x:Name="ResultBorder" Background="Transparent" CornerRadius="6" Padding="8" HorizontalAlignment="Stretch" VerticalAlignment="Center" Grid.Row="0" MinHeight="160">
+            <Border x:Name="ResultBorder" Background="Transparent" CornerRadius="6" Padding="8" HorizontalAlignment="Stretch" VerticalAlignment="Center" Grid.Row="0" MinHeight="160" PointerPressed="ResultBorder_PointerPressed">
                 <Border.RenderTransform>
                     <TranslateTransform Y="-20" />
                 </Border.RenderTransform>
@@ -87,12 +118,18 @@
                 </Grid.ColumnDefinitions>
                 <!-- Toggle on the left column: show a clear label next to the switch instead of On/Off text -->
                 <!-- compact On/Off toggle restored as before -->
-                <ToggleSwitch x:Name="AlwaysOnTopToggle" Grid.Column="0" Margin="8,0,6,0" VerticalAlignment="Center" Toggled="OnAlwaysOnTopToggled" OffContent="Let Hide" OnContent="Keep on Top" MinWidth="64" Padding="4,2" HorizontalAlignment="Left" />
-                <!-- Centered hint in the middle column -->
-                <TextBlock x:Name="HintText" Grid.Column="1" Text="Result is input × 10.25" Opacity="0.6" VerticalAlignment="Center" HorizontalAlignment="Center" />
-                <!-- Owner on the right column -->
+                <!-- Left: Owner -->
+                <Border Grid.Column="0" Background="Transparent" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <TextBlock x:Name="OwnerText" Text="Jacob Norrdvall" FontWeight="SemiBold" Foreground="CornflowerBlue" TextDecorations="Underline" Tapped="OnNameTapped" FontSize="16" />
+                </Border>
+                <!-- Middle: hint (removed per user request) -->
+                <TextBlock x:Name="HintText" Grid.Column="1" Text="" Opacity="0.0" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                <!-- Right: Settings button -->
                 <Border Grid.Column="2" Background="Transparent" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0">
-                    <TextBlock x:Name="OwnerText" Text="Jacob Nordvall" FontWeight="Normal" Foreground="CornflowerBlue" TextDecorations="Underline" Tapped="OnNameTapped" />
+                <Button x:Name="SettingsButton" Click="OnSettingsClicked" Width="36" Height="36" HorizontalAlignment="Right" Background="Transparent" BorderBrush="Transparent" Padding="4" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Margin="0">
+                        <!-- Increased button and image size for better tap target -->
+                        <Image Source="ms-appx:///Assets/settingsICONmine.png" Width="22" Height="22" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
                 </Border>
             </Grid>
         </Grid>
