@@ -362,6 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# Force include AppPackages folder (allow uploading built packages)
-!AppPackages/
-!AppPackages/**
+# (Previously forced inclusion of AppPackages removed so built packages are ignored)
