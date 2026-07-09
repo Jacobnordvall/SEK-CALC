@@ -367,3 +367,5 @@ FodyWeavers.xsd
 # Ignore project output folder that was being uploaded
 # Path: USD-Calc\USD-Calc\C
 USD-Calc/USD-Calc/C/
+# Also ignore the top-level USD-Calc\C output folder (some tooling writes releases here)
+USD-Calc/C/
