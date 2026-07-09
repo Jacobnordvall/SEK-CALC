@@ -42,25 +42,20 @@ namespace USD_Calc
         {
             InitializeComponent();
             // One-time clear of saved settings to allow fresh testing.
+            // Use LocalSettings as the marker so installed/read-only app folders are not required.
             try
             {
-                var marker = Path.Combine(AppContext.BaseDirectory, "__settings_cleared_once");
-                if (!File.Exists(marker))
+                try
                 {
-                    try
+                    var local = ApplicationData.Current.LocalSettings;
+                    if (!local.Values.ContainsKey("__settings_cleared_once"))
                     {
-                        var local = ApplicationData.Current.LocalSettings;
-                        local.Values.Clear();
+                        try { local.Values.Clear(); } catch { }
+                        try { ApplicationData.Current.RoamingSettings.Values.Clear(); } catch { }
+                        try { local.Values["__settings_cleared_once"] = true; } catch { }
                     }
-                    catch { }
-                    try
-                    {
-                        var roaming = ApplicationData.Current.RoamingSettings;
-                        roaming.Values.Clear();
-                    }
-                    catch { }
-                    try { File.WriteAllText(marker, DateTime.UtcNow.ToString("o")); } catch { }
                 }
+                catch { }
             }
             catch { }
             // Default input to 1 on start, then compute immediately
@@ -143,6 +138,52 @@ namespace USD_Calc
                             {
                                 HintText!.Text = $"Result is input × {m.ToString(CultureInfo.InvariantCulture).Replace('.', ',')}";
                             }
+                        }
+                    }
+                    catch { }
+
+                    // Restore saved settings (multiplier and checkboxes) for UI so app remembers user choices
+                    try
+                    {
+                        var local = ApplicationData.Current.LocalSettings;
+                        if (local != null)
+                        {
+                            // Multiplier: set settings box text if present
+                            try
+                            {
+                                if (local.Values.TryGetValue("Multiplier", out object mobj))
+                                {
+                                    var ms = mobj?.ToString() ?? "";
+                                    if (!string.IsNullOrWhiteSpace(ms) && SettingsMultiplierBox != null)
+                                        SettingsMultiplierBox.Text = ms;
+                                }
+                            }
+                            catch { }
+
+                            // RoundMode: 1 = always up, 0 = normal
+                            try
+                            {
+                                if (local.Values.TryGetValue("RoundMode", out object r))
+                                {
+                                    var isUp = false;
+                                    try { isUp = Convert.ToInt32(r) == 1; } catch { }
+                                    if (SettingsRoundUpCheck != null) SettingsRoundUpCheck.IsChecked = isUp;
+                                }
+                            }
+                            catch { }
+
+                            // AlwaysOnTop
+                            try
+                            {
+                                if (local.Values.TryGetValue("AlwaysOnTop", out object t))
+                                {
+                                    var atop = false;
+                                    try { atop = Convert.ToBoolean(t); } catch { }
+                                    if (SettingsAlwaysOnTopCheck != null) SettingsAlwaysOnTopCheck.IsChecked = atop;
+                                    try { SetWindowTopmost(atop); } catch { }
+                                }
+                            }
+                            catch { }
                         }
                     }
                     catch { }
@@ -576,7 +617,7 @@ namespace USD_Calc
                 // RoundMode: 1 = always up, 0 = normal
                 local.Values["RoundMode"] = SettingsRoundUpCheck!.IsChecked == true ? 1 : 0;
                 local.Values["AlwaysOnTop"] = SettingsAlwaysOnTopCheck!.IsChecked == true;
-                try { WindowHelpers.SetWindowTopmost(SettingsAlwaysOnTopCheck!.IsChecked == true); } catch { }
+                try { SetWindowTopmost(SettingsAlwaysOnTopCheck!.IsChecked == true); } catch { }
                 SettingsPanel!.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             }
             catch { }
