@@ -33,6 +33,10 @@ namespace USD_Calc
     {
         // remember last clipboard text we applied so we don't reapply the same value repeatedly
         private string _lastClipboardTextApplied = string.Empty;
+        // suppress InputBox TextChanged handler when programmatically updating the input
+        private bool _suppressInputTextChanged = false;
+        // prevent reentrant/duplicate handling of the copy action
+        private bool _isHandlingCopy = false;
 
         public MainWindow()
         {
@@ -163,6 +167,12 @@ namespace USD_Calc
 
         private void OnInputChanged(object sender, TextChangedEventArgs e)
         {
+            if (_suppressInputTextChanged)
+            {
+                // clear the flag and skip the automatic compute; caller will compute explicitly
+                _suppressInputTextChanged = false;
+                return;
+            }
             ComputeAndShow();
         }
 
@@ -183,11 +193,11 @@ namespace USD_Calc
             // Normalize separators so comma and dot are treated the same
             var normalized = NormalizeNumberString(candidate);
 
-            if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out double value) ||
-                double.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out value))
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal value) ||
+                decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out value))
             {
                 // Read multiplier and rounding settings from LocalSettings (persisted)
-                double multiplier = 10.25;
+                decimal multiplier = 10.25m;
                 int roundMode = 0; // 0 = normal, 1 = always round up
                 try
                 {
@@ -196,7 +206,7 @@ namespace USD_Calc
                     {
                         if (local.Values.TryGetValue("Multiplier", out object mobj))
                         {
-                            if (double.TryParse(mobj?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out double mval))
+                            if (decimal.TryParse(mobj?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal mval))
                                 multiplier = mval;
                         }
 
@@ -208,6 +218,15 @@ namespace USD_Calc
                             }
                             catch { }
                         }
+                        // Prefer the live UI toggle if present (reflects immediate user choice even before saving)
+                        try
+                        {
+                            if (SettingsRoundUpCheck != null)
+                            {
+                                roundMode = SettingsRoundUpCheck.IsChecked == true ? 1 : 0;
+                            }
+                        }
+                        catch { }
                     }
                 }
                 catch
@@ -215,12 +234,12 @@ namespace USD_Calc
                     // ignore settings read errors and use defaults
                 }
 
-                double rawResult = value * multiplier;
-                double result;
+                decimal rawResult = value * multiplier;
+                decimal result;
                 if (roundMode == 1)
                 {
                     // Always round up to 2 decimal places
-                    result = Math.Ceiling(rawResult * 100.0) / 100.0;
+                    result = Math.Ceiling(rawResult * 100m) / 100m;
                 }
                 else
                 {
@@ -238,24 +257,109 @@ namespace USD_Calc
             }
         }
 
-        private void ResultText_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        private async void ResultText_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            var text = ResultText!.Text ?? string.Empty;
-            // copy numeric part only
-            var num = text.Replace("SEK", "").Trim();
+            // Prevent duplicate handling (e.g., pointer + tap events firing)
+            if (_isHandlingCopy)
+                return;
+            _isHandlingCopy = true;
             try
             {
-                var dataPackage = new DataPackage();
-                dataPackage.SetText(num);
-                Clipboard.SetContent(dataPackage);
-                // remember we just set this clipboard text so returning focus won't reapply it
-                _lastClipboardTextApplied = num;
-                // show confirmation
+                // First try to read the current clipboard and use it as input if it contains a number.
+                var dp = Clipboard.GetContent();
+                if (dp != null && dp.Contains(StandardDataFormats.Text))
+                {
+                    var text = await dp.GetTextAsync();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        // If the clipboard already contains the value we last placed there, treat this as a simple copy confirmation
+                        if (!string.IsNullOrEmpty(_lastClipboardTextApplied) && string.Equals(_lastClipboardTextApplied, text, StringComparison.Ordinal))
+                        {
+                            // Re-copy the currently displayed result (ensures clipboard is the computed value) and show confirmation
+                            var curText2 = ResultText!.Text ?? string.Empty;
+                            var curNum2 = curText2.Replace("SEK", "").Trim();
+                            var dp2 = new DataPackage();
+                            dp2.SetText(curNum2);
+                            Clipboard.SetContent(dp2);
+                            try { Clipboard.Flush(); } catch { }
+                            _lastClipboardTextApplied = curNum2;
+                            _ = ShowCopyConfirmationAsync();
+                            return;
+                        }
+                        var match = Regex.Match(text, "-?\\d[\\d,\\.]*");
+                        if (match.Success)
+                        {
+                            var candidate = match.Value;
+                            var normalized = NormalizeNumberString(candidate);
+                            if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out double value) ||
+                                double.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out value))
+                            {
+                                // If the InputBox already contains the same numeric value, avoid re-applying and recomputing
+                                try
+                                {
+                                    var curInput = InputBox?.Text ?? string.Empty;
+                                    var curNorm = NormalizeNumberString(curInput);
+                                    if (double.TryParse(curNorm, NumberStyles.Any, CultureInfo.InvariantCulture, out double curVal) ||
+                                        double.TryParse(curNorm, NumberStyles.Any, CultureInfo.CurrentCulture, out curVal))
+                                    {
+                                        if (Math.Abs(curVal - value) < 1e-12)
+                                        {
+                                            // Input already matches clipboard numeric value; just copy the currently displayed result
+                                            var existingResult = ResultText!.Text ?? string.Empty;
+                                            var existingNum = existingResult.Replace("SEK", "").Trim();
+                                            var dataPackage2 = new DataPackage();
+                                            dataPackage2.SetText(existingNum);
+                                            Clipboard.SetContent(dataPackage2);
+                                            try { Clipboard.Flush(); } catch { }
+                                            _lastClipboardTextApplied = existingNum;
+                                            _ = ShowCopyConfirmationAsync();
+                                            return;
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                // Update input from clipboard and recompute (avoid double-compute by suppressing TextChanged)
+                                var display = normalized.Replace(".", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
+                                _suppressInputTextChanged = true;
+                                InputBox!.Text = display;
+                                // compute once explicitly
+                                ComputeAndShow();
+
+                                // Copy the numeric part of the freshly computed result into the clipboard
+                                var resultText = ResultText!.Text ?? string.Empty;
+                                var num = resultText.Replace("SEK", "").Trim();
+                                var dataPackage = new DataPackage();
+                                dataPackage.SetText(num);
+                                Clipboard.SetContent(dataPackage);
+                                try { Clipboard.Flush(); } catch { }
+
+                                // remember we applied the result we just placed into the clipboard so follow-up clipboard checks won't reapply
+                                _lastClipboardTextApplied = num;
+                                _ = ShowCopyConfirmationAsync();
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: copy current displayed numeric result
+                var curText = ResultText!.Text ?? string.Empty;
+                var curNum = curText.Replace("SEK", "").Trim();
+                var fallbackPackage = new DataPackage();
+                fallbackPackage.SetText(curNum);
+                Clipboard.SetContent(fallbackPackage);
+                try { Clipboard.Flush(); } catch { }
+                _lastClipboardTextApplied = curNum;
                 _ = ShowCopyConfirmationAsync();
             }
             catch
             {
-                // ignore
+                // ignore any clipboard/access errors
+            }
+            finally
+            {
+                _isHandlingCopy = false;
             }
         }
 
