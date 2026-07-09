@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # (Previously forced inclusion of AppPackages removed so built packages are ignored)
+
+# Ignore project output folder that was being uploaded
+# Path: USD-Calc\USD-Calc\C
+USD-Calc/USD-Calc/C/
