@@ -26,7 +26,8 @@ namespace USD_Calc
     /// </summary>
     public partial class App : Application
     {
-        private Window? _window;
+        // Keep a static reference to the main window so other components (dialogs) can notify it
+        public static MainWindow? MainWindowInstance;
 
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
@@ -43,8 +44,8 @@ namespace USD_Calc
         /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-            _window = new MainWindow();
-            _window.Activate();
+            MainWindowInstance = new MainWindow();
+            MainWindowInstance.Activate();
         }
     }
 }

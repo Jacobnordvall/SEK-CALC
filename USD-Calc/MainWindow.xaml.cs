@@ -225,7 +225,7 @@ namespace USD_Calc
             }
         }
 
-        private void ComputeAndShow()
+        public void ComputeAndShow()
         {
             var txt = InputBox.Text?.Trim() ?? string.Empty;
             // Try to extract a number from the text
@@ -611,13 +611,16 @@ namespace USD_Calc
                 }
                 else if (double.TryParse(SettingsMultiplierBox.Text.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var m))
                 {
-                    local.Values["Multiplier"] = m;
+                    // Store as invariant string to avoid culture-dependent ToString() later
+                    local.Values["Multiplier"] = m.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 }
 
                 // RoundMode: 1 = always up, 0 = normal
                 local.Values["RoundMode"] = SettingsRoundUpCheck!.IsChecked == true ? 1 : 0;
                 local.Values["AlwaysOnTop"] = SettingsAlwaysOnTopCheck!.IsChecked == true;
                 try { SetWindowTopmost(SettingsAlwaysOnTopCheck!.IsChecked == true); } catch { }
+                // Recompute immediately so the displayed result reflects the saved settings
+                try { ComputeAndShow(); } catch { }
                 SettingsPanel!.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             }
             catch { }

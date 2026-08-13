@@ -79,7 +79,8 @@ namespace USD_Calc
             // Save settings
             if (double.TryParse(_multiplierBox.Text.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var m))
             {
-                _local.Values["Multiplier"] = m;
+                // Store as invariant string to avoid culture-dependent ToString() later
+                _local.Values["Multiplier"] = m.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
 
             _local.Values["RoundMode"] = _roundingToggle.IsOn ? 1 : 0; // 1 = always up, 0 = normal
@@ -88,6 +89,13 @@ namespace USD_Calc
             try
             {
                 WindowHelpers.SetWindowTopmost(_alwaysOnTopCheck.IsChecked == true);
+            }
+            catch { }
+
+            // Notify main window to recompute so UI updates immediately after saving settings
+            try
+            {
+                App.MainWindowInstance?.ComputeAndShow();
             }
             catch { }
         }
