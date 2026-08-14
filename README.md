@@ -10,8 +10,9 @@ Detta skript söker automatiskt upp MSIX-filen i din Downloads-mapp (inklusive u
 
 ### Automatisk installation via PowerShell
 
-1. Högerklicka på **Start-menyn** och välj **Terminal (Administratör)** eller **Windows PowerShell (Administratör)**.
-2. Kopiera och klistra in följande skriptblock i sin helhet och tryck på **Enter**:
+1. Verifiera att filen blev nedladdad.
+2. Högerklicka på **Start-menyn** och välj **Terminal (Administratör)** eller **Windows PowerShell (Administratör)**.
+3. Kopiera och klistra in följande skriptblock i sin helhet och tryck på **Enter**:
 
 ```powershell
 Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Recurse -Filter "USD-Calc*.msix" -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object {
