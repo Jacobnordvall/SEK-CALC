@@ -52,18 +52,24 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0">
-                    <TextBlock Text="Settings" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <TextBlock Text="Settings" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="SettingsVersionText" Text="v0.0.0" FontSize="12" Opacity="0.8" VerticalAlignment="Center" Margin="8,2,0,0" />
+                    </StackPanel>
 
                     <TextBlock Text="Multiplier" Margin="0,6,0,4" />
                     <TextBox x:Name="SettingsMultiplierBox" Width="160" HorizontalAlignment="Left" />
-
+           
                     <!-- Checkbox on the left for consistent layout -->
                     <CheckBox x:Name="SettingsRoundUpCheck" Content="Always round up" IsChecked="True" Margin="0,6,0,0" />
 
                     <CheckBox x:Name="SettingsAlwaysOnTopCheck" Content="Always on top" Margin="0,12,0,0" />
+
+                    <!-- Hours saved display aligned with other settings -->
+                    <TextBlock x:Name="SettingsHoursSavedText" Text="" Margin="0,12,0,0" Opacity="0.8" />
                 </StackPanel>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,16,0,0" Spacing="8">
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,8,0,0" Spacing="8">
                     <Button x:Name="SettingsSaveButton" Content="Save" Click="OnSettingsSaveClicked" />
                     <Button x:Name="SettingsCloseButton" Content="Close" Click="OnSettingsCloseClicked" />
                 </StackPanel>
@@ -73,12 +79,18 @@
         <!-- Always-on-top toggle removed from bottom-left; placed next to hint/owner text below -->
 
         <Grid Grid.Row="1" Margin="12" HorizontalAlignment="Center">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="USD:" VerticalAlignment="Center" Margin="0,0,8,0" x:Name="UsdLabel" Grid.Column="0" />
-            <TextBox x:Name="InputBox" Width="240" PlaceholderText="e.g. 5" TextChanged="OnInputChanged" KeyDown="OnInputKeyDown" HorizontalAlignment="Left" Grid.Column="1" />
+            <TextBlock Text="USD:" VerticalAlignment="Center" Margin="0,0,8,0" x:Name="UsdLabel" Grid.Column="0" Grid.Row="0" />
+            <TextBox x:Name="InputBox" Width="240" PlaceholderText="e.g. 5" TextChanged="OnInputChanged" KeyDown="OnInputKeyDown" HorizontalAlignment="Left" Grid.Column="1" Grid.Row="0" />
+            <!-- Main window saved summary centered under the input box -->
+            <TextBlock x:Name="MainSavedText" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Text="" HorizontalAlignment="Center" Margin="0,6,0,0" Opacity="0.8" />
         </Grid>
 
         <Grid Grid.Row="2" Padding="12">
@@ -120,7 +132,7 @@
                 <!-- compact On/Off toggle restored as before -->
                 <!-- Left: Owner -->
                 <Border Grid.Column="0" Background="Transparent" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,0">
-                    <TextBlock x:Name="OwnerText" Text="Jacob Norrdvall" FontWeight="SemiBold" Foreground="CornflowerBlue" TextDecorations="Underline" Tapped="OnNameTapped" FontSize="16" />
+                    <TextBlock x:Name="OwnerText" Text="Jacob Nordvall" FontWeight="SemiBold" Foreground="CornflowerBlue" TextDecorations="Underline" Tapped="OnNameTapped" FontSize="16" />
                 </Border>
                 <!-- Middle: hint (removed per user request) -->
                 <TextBlock x:Name="HintText" Grid.Column="1" Text="" Opacity="0.0" VerticalAlignment="Center" HorizontalAlignment="Center" />
