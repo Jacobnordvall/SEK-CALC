@@ -250,7 +250,18 @@ namespace USD_Calc
                     {
                         model.MainWindowWidth = appWin.Size.Width;
                         model.MainWindowHeight = appWin.Size.Height;
-                        try { var p = appWin.Position; model.MainWindowX = p.X; model.MainWindowY = p.Y; } catch { }
+                        try
+                        {
+                            var p = appWin.Position;
+                            // Ignore minimized/offscreen sentinel positions (e.g. -32000) which indicate the window
+                            // is minimized or not in a valid on-screen position. Only persist if reasonable.
+                            if (p.X > -32000 && p.Y > -32000)
+                            {
+                                model.MainWindowX = p.X;
+                                model.MainWindowY = p.Y;
+                            }
+                        }
+                        catch { }
                     }
                 }
                 catch { }
@@ -425,11 +436,15 @@ namespace USD_Calc
                             {
                                 if (loaded.MainWindowWidth.HasValue && loaded.MainWindowHeight.HasValue)
                                 {
-                                    appWindow.Resize(new SizeInt32(loaded.MainWindowWidth.Value, loaded.MainWindowHeight.Value));
-                                }
-                                if (loaded.MainWindowX.HasValue && loaded.MainWindowY.HasValue)
-                                {
-                                    try { appWindow.Move(new PointInt32(loaded.MainWindowX.Value, loaded.MainWindowY.Value)); } catch { }
+                                    try
+                                    {
+                                        // Resize first to ensure Move uses correct window dimensions
+                                        appWindow.Resize(new SizeInt32(loaded.MainWindowWidth.Value, loaded.MainWindowHeight.Value));
+                                        // Then determine a safe position: clamp/center if stored position is invalid or would place window offscreen.
+                                        var pos = ClampOrCenterPosition(loaded.MainWindowX, loaded.MainWindowY, loaded.MainWindowWidth.Value, loaded.MainWindowHeight.Value);
+                                        try { appWindow.Move(pos); } catch { }
+                                    }
+                                    catch { }
                                 }
                             }
                         }
@@ -1547,6 +1562,99 @@ namespace USD_Calc
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern IntPtr LoadImage(IntPtr hinst, string lpszName, uint uType, int cxDesired, int cyDesired, uint fuLoad);
+
+        // P/Invoke for window placement and virtual screen metrics
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINTAPI { public int X; public int Y; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECTAPI { public int left; public int top; public int right; public int bottom; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WINDOWPLACEMENT
+        {
+            public int length;
+            public int flags;
+            public int showCmd;
+            public POINTAPI ptMinPosition;
+            public POINTAPI ptMaxPosition;
+            public RECTAPI rcNormalPosition;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetSystemMetrics(int nIndex);
+
+        private const int SW_SHOWNORMAL = 1;
+        private const int SW_SHOWMINIMIZED = 2;
+        private const int SW_SHOWMAXIMIZED = 3;
+
+        private const int SM_XVIRTUALSCREEN = 76;
+        private const int SM_YVIRTUALSCREEN = 77;
+        private const int SM_CXVIRTUALSCREEN = 78;
+        private const int SM_CYVIRTUALSCREEN = 79;
+
+        private bool IsWindowInNormalState()
+        {
+            try
+            {
+                var hwnd = WindowNative.GetWindowHandle(this);
+                var wp = new WINDOWPLACEMENT();
+                wp.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+                if (GetWindowPlacement(hwnd, ref wp))
+                {
+                    return wp.showCmd == SW_SHOWNORMAL;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private (int left, int top, int width, int height) GetVirtualScreenBounds()
+        {
+            try
+            {
+                int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                return (left, top, width, height);
+            }
+            catch { }
+            return (0, 0, 1920, 1080);
+        }
+
+        private PointInt32 ClampOrCenterPosition(int? storedX, int? storedY, int windowWidth, int windowHeight)
+        {
+            var vb = GetVirtualScreenBounds();
+            int left = vb.left;
+            int top = vb.top;
+            int vw = vb.width;
+            int vh = vb.height;
+
+            if (storedX.HasValue && storedY.HasValue)
+            {
+                int x = storedX.Value;
+                int y = storedY.Value;
+                // If within overall virtual area, clamp so window is visible
+                int maxX = left + Math.Max(0, vw - windowWidth);
+                int maxY = top + Math.Max(0, vh - windowHeight);
+                if (x < left || x > left + vw || y < top || y > top + vh)
+                {
+                    // out of range -> center
+                    int cx = left + (vw - windowWidth) / 2;
+                    int cy = top + (vh - windowHeight) / 2;
+                    return new PointInt32(cx, cy);
+                }
+                int cx2 = Math.Min(Math.Max(x, left), maxX);
+                int cy2 = Math.Min(Math.Max(y, top), maxY);
+                return new PointInt32(cx2, cy2);
+            }
+            // No stored pos -> center
+            int cx3 = left + (vw - windowWidth) / 2;
+            int cy3 = top + (vh - windowHeight) / 2;
+            return new PointInt32(cx3, cy3);
+        }
 
         private void SetWindowIconFromFile(string iconPath)
         {
